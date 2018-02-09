@@ -1,0 +1,104 @@
+# check_mk SNMP plugin to monitor Spectracom NetClock Time Server.
+#
+# v1.1 12/15/2013
+#
+# Alert thresholds can be set in check_mk config files. E.g., for
+# item called "Battery Time":
+# spectracom_Battery_Time_default_levels = [300, 600, None, None]
+# Notes:
+#   - see sptcm_checks for list of available items
+#   - see sptcm_defaults_name() for variable naming details
+#   - format is: low critical, low warning, high warning, high critical
+#   - by default, the levels are (-inf, -inf, inf, inf)
+#   - 'None' indicates alerts of this level should not be generated
+#       (don't use float('inf') in check_mk config files as it breaks 
+#       precompiled checks as of as of 1.2.2p2)
+#   - non-None values must satifsy: locrit <= lowarn <= hiwarn <= hicrit
+#       (i.e. things like (0, 0, None, 100) are OK)
+#
+# sptcm = spectracom
+#
+inf = float('inf')
+sptcm_checks = (
+    #oid, check_mk item, default thresholds (locrit, lowarn, hiwarn, hicrit), format
+    ('3.1.2.8.2.2', 'NTP Stratum', (-inf, -inf, inf, inf), lambda v: "%s" % v),
+    ('3.1.2.8.2.4', 'NTP Peer', (-inf, -inf, inf, inf), lambda v: "%s" % v),
+    ('3.1.2.8.2.5', 'NTP Peer Delay', (-inf, -inf, inf, inf), lambda v: "%s" % v),
+    ('3.1.2.8.2.6', 'NTP Peer Offset', (-inf, -inf, inf, inf), lambda v: "%s" % v),
+    ('3.1.2.8.2.7', 'NTP Peer Jitter', (-inf, -inf, inf, inf), lambda v: "%s" % v),
+    ('3.1.2.1.20',  'Name', (-inf, -inf, inf, inf), lambda v: "%s" % v),
+    ('3.1.2.1.3',   'Temperature', (-inf, -inf, inf, inf), lambda v: "%sC" % v),
+    ('3.1.2.2.2.2', 'GPS Satellites', (0, 5, inf, inf), lambda v: "%s" % v),
+    ('3.1.2.1.8',   'Sync Status', (0, 0, inf, inf), 
+                                    lambda v: {'0':'nosync', '1':'sync'}[v]),
+    ('3.1.2.2.2.8', 'GPS Quality', (0, 0, inf, inf),
+                                    lambda v: {'0':'failed', '1':'passed'}[v]),
+    ('3.1.2.2.2.3', 'GPS Status', (2, 3, inf, inf), 
+                                    lambda v: { '2':'Bad Geometry', 
+                                                '3':'acquiringSatellites',
+                                                '4':'positionHold',
+                                                '5':'propogateMode',
+                                                '6':'gps2DFix',
+                                                '7':'gps3DFix'}[v]),
+    ('3.1.2.1.9', 'Time Source', (0, 1, 3, 255), 
+                                    lambda v: { '0':'none',
+                                                '1':'serialTimeCode',
+                                                '2':'gps',
+                                                '3':'factory',
+                                                '4':'modem',
+                                                '5':'user',
+                                                '6':'usersync',
+                                                '7':'ntp',
+                                                '8':'irigin',
+                                                '255':'unknown'}[v]),
+    ('3.1.2.8.2.1', 'NTP Status', (0, 1, inf, inf), 
+                                    lambda v: {'-1':'unknown',
+                                                '0':'notRunning',
+                                                '1':'notSyrnchonized',
+                                                '2':'synchronized'}[v]),
+)
+sptcm_oids, sptcm_items, sptcm_thresholds, sptcm_fmts = zip(*sptcm_checks)
+
+def sptcm_defaults_name(item):
+    return 'spectracom_' + item.replace(' ', '_') + '_default_levels'
+
+for item,thresh in zip(sptcm_items, sptcm_thresholds):
+    globals()[sptcm_defaults_name(item)] = thresh
+
+def sptcm_inventory(checkname, info):
+    if info:
+        return [(i, '', sptcm_defaults_name(i))
+                    for i,v in zip(sptcm_items, info[0]) if v]
+    else:
+        return []
+
+def sptcm_check_level(item, params, info):
+    idx = sptcm_items.index(item)
+    fmt = sptcm_fmts[idx]
+    sv = info[0][idx] #string
+    nv = saveint(sv) #numeric
+    text = '%s: %s' % (item, fmt(sv))
+    locrit, lowarn, hiwarn, hicrit = sptcm_get_levels(params)
+    state = max((nv <= locrit) + (nv <= lowarn), (nv >= hiwarn) + (nv >= hicrit))
+    perf = [(item, nv)]
+    return (state, nagios_state_names[state] + ' - ' + text, perf)
+
+def sptcm_get_levels(params):
+    # using float('inf') in check_mk's config files breaks precompiled checks
+    # (as of 1.2.2p2), so None is used instead to suppress alerts
+    lc,lw,hw,hc = params
+    hc = (hc if hc is not None else float('inf'))
+    hw = (hw if hw is not None else hc)
+    lc = (lc if lc is not None else -float('inf'))
+    lw = (lw if lw is not None else lc)
+    return lc,lw,hw,hc
+
+check_info['spectracom'] = {
+        'service_description': 'NetClock %s',
+        'check_function': sptcm_check_level,
+        'inventory_function': sptcm_inventory,
+        'has_perfdata': True,
+        'snmp_info': ('.1.3.6.1.4.1.18837', sptcm_oids),
+        'snmp_scan_function': lambda oid: oid(".1.3.6.1.4.1.18837.3.1.2.1.20.0")
+}
+# vim:ft=python

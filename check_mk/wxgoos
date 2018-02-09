@@ -1,0 +1,142 @@
+# check_mk SNMP plugin for IT Watchdog's wxGoos (Weather Goose)
+# environmental monitor.
+#
+# version 1.1, 12/14/2013
+#
+# Alert thresholds (low critical, low warning, high warning, high critical)
+# can be set or overridden in configuration files. If undefined, thresholds
+# will be infinities (i.e. no alerts), unless different defaults are set
+# below in the factory_settings['wxgoos_default_levels'] variable.
+#
+# Supported probe types are defined in the wg_probes variable. New probe
+# types can be added using information in IT Watchdog's wxGoos MIB.
+#
+# Example custom thresholds in check_mk config files:
+# wxgoos_default_levels = {
+#   # item syntax: 
+#   'PROBE_TYPE|SERIAL_NUM':{
+#           'SENSOR_NAME':(LOCRIT, LOWARN, HIWARN, HICRIT),
+#           ...
+#       },
+#   ...
+#   # defaults for air flow (airflow) and temperature (temp) sensors
+#   # of all probes whose type is 'Air Flow':
+#   'Air Flow':{'airflow':(0, 10, 100, None),
+#               'temp':(5, 15, 35, 45),},
+#   # custom thresholds for temperature (temp) sensor of probe with
+#   # serial number 80000000FDA90628 (these will override thresholds
+#   # defined for the probe type):
+#   '80000000FDA90628':{'temp':(0, None, None, 20),},
+# }
+# Notes:
+#   - difference between probe and sensor is explained below
+#   - defaults for specific serial number override defaults for probe types
+#   - defaults in check_mk config files override defaults set in this file
+#   - None indicates alarms of corresponding level should not be generated
+#       (note that using float('inf') in check_mk's config files will generate
+#       broken precompiled checks)
+#   - thresholds must satifsy: locrit <= lowarn <= hiwarn <= hicrit
+#   - having the same value for critical and warning threshold will
+#       result in only critical alarms being generated
+#
+# IT Watchdog's wxGoos terminology used in their MIB is sometimes ambiguous.
+# To keep things consistent, here, a 'probe' is a collection of 'sensors'.
+# Each 'sensor' records exactly one physical property, such as temperature,
+# or probe metadata, such as its serial number (names of metadata sensors 
+# start with an underscore). Multiple probes of the same type attached to 
+# a wxGoos are distinguishable by their metadata. Further, same property 
+# can be recorded by multiple probes. For example, both 'Climate' and 
+# 'Temperature' probes have 'temp' sensor that records temperature.
+# 
+# wg = weather goose
+
+from collections import namedtuple
+
+factory_settings['wxgoos_default_levels'] = {
+    'Temperature': {'temp': (5, 15, 35, 45)},
+}
+
+Wg_PS = namedtuple('ProbeSpec', ['type', 'oid', 'sensors'])
+wg_probes = (
+    Wg_PS("Temperature", '2.4', ['_serial', '_desc', '_present', 'temp']),
+    Wg_PS("Air Flow", '2.5', ['_serial', '_desc', '_present', 'airflow', 'temp', 'hum']),
+    Wg_PS("Climate", '2.2', ['_serial', '_desc', '_present', 
+                    'temp', 'hum', 'airflow', 'light', 'sound', 'io1', 'io2', 'io3']),
+)
+
+def wg_inventory(checkname, info):
+    inv = []
+    if info:
+        readings = wg_get_readings(info, wg_probes)
+        for probe_type in readings:
+            for probe_num in readings[probe_type]:
+                # rsplit is used later to get probe type and number from item
+                item = "%s %s" % (probe_type, probe_num)
+                inv.append((item, '', None))
+    return inv
+
+# Convert the flat 'info' data structure into a readable dictionary.
+# check_mk's 'info' variable is a table (list of lists) that encodes lists 
+# of values corresponding to oids (and possibly their children) specified 
+# in snmp_info[1]. Because these lists can have different lengths, check_mk
+# fills missing values with ''.
+def wg_get_readings(info, probe_specs):
+    # values of each oid in snmp_info[1] will be in separate list
+    payload = [[e for e in c if e != ''] for c in zip(*info)]
+    rdngs = dict((s.type, {}) for s in probe_specs)
+    for probe_id,probe in enumerate(probe_specs):
+        num_probes = len(payload[probe_id])/len(probe.sensors)
+        for probe_num in range(num_probes):
+            vals = payload[probe_id][probe_num::num_probes]
+            vals = dict([item for item in zip(probe.sensors, vals)])
+            meta = dict([(k,v) for k,v in vals.items() if k.startswith('_')])
+            data = dict([(k,int(v)) for k,v in vals.items() if not k.startswith('_')])
+            rdngs[probe.type][probe_num] = {}
+            rdngs[probe.type][probe_num]['meta'] = meta
+            rdngs[probe.type][probe_num]['data'] = data
+    return rdngs
+
+def wg_get_thresholds(defaults, sensor, probe_serial, probe_type):
+    try:
+        lc,lw,hw,hc = defaults[probe_serial][sensor]
+    except KeyError:
+        try:
+            lc,lw,hw,hc = defaults[probe_type][sensor]
+        except KeyError:
+            lc,lw,hw,hc = -float('inf'), -float('inf'), float('inf'), float('inf')
+    # using float('inf') in check_mk's config files breaks precompiled checks
+    # (as of 1.2.2p2), so None is used instead to suppress alerts, and we need 
+    # to be clever about how to convert None to numeric values
+    hc = (hc if hc is not None else float('inf'))
+    hw = (hw if hw is not None else hc)
+    lc = (lc if lc is not None else -float('inf'))
+    lw = (lw if lw is not None else lc)
+    return lc,lw,hw,hc
+
+def wg_check(item, params, info):
+    probe_type, probe_num = item.rsplit(' ', 1)
+    readings = wg_get_readings(info, wg_probes)[probe_type][int(probe_num)]
+    data = readings['data']
+    meta = readings['meta']
+    text = ' sensor info: %s, %s' % (meta['_serial'], meta['_desc'])
+    if meta['_present'] == '0':
+        return (3, nagios_state_names[3] + ' - unplugged? %s' % text)
+    stats = []
+    perf = []
+    for sensor,v in sorted(data.items()):
+        lc,lw,hw,hc = wg_get_thresholds(params, sensor, meta['_serial'], probe_type)
+        stats.append(max((v <= lc) + (v <= lw), (v >= hw) + (v >= hc)))
+        text = ' %s=%s (%s); ' % (sensor, v, nagios_state_names[stats[-1]]) + text
+        perf.append([sensor, v])
+    return (max(stats), nagios_state_names[max(stats)] + ' - ' + text, perf)
+
+check_info['wxgoos'] = {
+        'has_perfdata': True,
+        'check_function': wg_check,
+        'inventory_function': wg_inventory,
+        'service_description': 'WxGoos %s',
+        'snmp_info': ('.1.3.6.1.4.1.17373', [p.oid for p in wg_probes]),
+        'snmp_scan_function': lambda oid: 'WxGoos' in oid('.1.3.6.1.2.1.1.1.0'),
+        'default_levels_variable': 'wxgoos_default_levels',
+}
+# vim:ft=python

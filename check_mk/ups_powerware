@@ -1,0 +1,85 @@
+# check_mk plugin to monitor UPS performance using objects defined
+# in Eaton Powerwave MIB. 
+#
+# v1.1 12/15/2013
+#
+# Alert thresholds can be set in check_mk config files. E.g., for
+# item called "Battery Time":
+# ups_powerware_Battery_Time_default_levels = [300, 600, None, None]
+# Notes:
+#   - see uepwr_checks for list of available items
+#   - see eupwr_defaults_name() for variable naming details
+#   - format is: low critical, low warning, high warning, high critical
+#   - by default, the levels are (-inf, -inf, inf, inf)
+#   - 'None' indicates alerts of this level should not be generated
+#       (don't use float('inf') in check_mk config files as it breaks 
+#       precompiled checks as of as of 1.2.2p2)
+#   - non-None values must satifsy: locrit <= lowarn <= hiwarn <= hicrit
+#       (i.e. things like (0, 0, None, 100) are OK)
+#
+# uepwr = ups eaton powerware
+
+inf = float('inf')
+uepwr_checks = (
+    #oid, check_mk item, default thresholds (locrit, lowarn, hiwarn, hicrit), format
+    ('1.3.0', 'Firmware Version',   (-inf, -inf, inf, inf), lambda v: "%s" % v),
+    ('3.4.1.2.1', 'Input Voltage',  (-inf, -inf, inf, inf), lambda v: "%sV" % v),
+    ('3.4.1.3.1', 'Input Current',  (-inf, -inf, inf, inf), lambda v: "%sA" % v),
+    ('3.4.1.4.1', 'Input Power',    (-inf, -inf, inf, inf), lambda v: "%sW" % v),
+    ('4.4.1.2.1', 'Output Voltage', (-inf, -inf, inf, inf), lambda v: "%sV" % v),
+    ('4.4.1.3.1', 'Output Current', (-inf, -inf, inf, inf), lambda v: "%sA" % v),
+    ('4.4.1.4.1', 'Output Power',   (-inf, -inf, inf, inf), lambda v: "%sW" % v),
+    ('4.1.0', 'Load',               (-inf, -inf, inf, inf), lambda v: "%s%%" % v),
+    ('6.5.0', 'Temperature',        (-inf, -inf, inf, inf), lambda v: "%sC" % v),
+    ('6.6.0', 'Humidity',           (-inf, -inf, inf, inf), lambda v: "%s%%" % v),
+    ('2.4.0', 'Battery Level',      (-inf, -inf, inf, inf), lambda v: "%s%%" % v),
+    ('2.2.0', 'Battery Voltage',    (-inf, -inf, inf, inf), lambda v: "%sV" % v),
+    ('2.3.0', 'Battery Current',    (-inf, -inf, inf, inf), lambda v: "%sA" % v),
+    ('2.1.0', 'Battery Time',       (-inf, -inf, inf, inf), 
+                                         lambda v: get_age_human_readable(saveint(v))),
+)
+uepwr_oids, uepwr_items, uepwr_thresholds, uepwr_fmts = zip(*uepwr_checks)
+
+def uepwr_defaults_name(item):
+    return 'ups_powerware_' + item.replace(' ', '_') + '_default_levels'
+
+for item,thresh in zip(uepwr_items, uepwr_thresholds):
+    globals()[uepwr_defaults_name(item)] = thresh
+
+def uepwr_inventory(checkname, info):
+    if info:
+        return [(i, '', uepwr_defaults_name(i))
+                    for i,v in zip(uepwr_items, info[0]) if v]
+    else:
+        return []
+
+def uepwr_check_level(item, params, info):
+    idx = uepwr_items.index(item)
+    fmt = uepwr_fmts[idx]
+    sv = info[0][idx] #string
+    nv = saveint(sv) #numeric
+    text = '%s: %s' % (item, fmt(sv))
+    locrit, lowarn, hiwarn, hicrit = uepwr_get_levels(params)
+    state = max((nv < locrit) + (nv < lowarn), (nv > hiwarn) + (nv > hicrit))
+    perf = [(item, nv)]
+    return (state, nagios_state_names[state] + ' - ' + text, perf)
+
+def uepwr_get_levels(params):
+    # using float('inf') in check_mk's config files breaks precompiled checks
+    # (as of 1.2.2p2), so None is used instead to suppress alerts
+    lc,lw,hw,hc = params
+    hc = (hc if hc is not None else float('inf'))
+    hw = (hw if hw is not None else hc)
+    lc = (lc if lc is not None else -float('inf'))
+    lw = (lw if lw is not None else lc)
+    return lc,lw,hw,hc
+
+check_info['ups_powerware'] = {
+        'service_description': 'UPS %s',
+        'check_function': uepwr_check_level,
+        'inventory_function': uepwr_inventory,
+        'has_perfdata': True,
+        'snmp_info': ('.1.3.6.1.4.1.534.1', uepwr_oids),
+        'snmp_scan_function': lambda oid: 'Dell UPS' in oid(".1.3.6.1.2.1.1.1.0"),
+}
+# vim:ft=python
