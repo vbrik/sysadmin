@@ -7,4 +7,4 @@ user=$2
 pass=$3
 
 set -x
-racadm -r $host -u $user -p $pass set System.LCD.Configuration 16
+idracadm7 -r $host -u $user -p $pass set System.LCD.Configuration 16
