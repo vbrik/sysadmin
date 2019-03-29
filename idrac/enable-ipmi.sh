@@ -9,7 +9,7 @@ target=${4-$user}
 priv=${5-4}
 
 set -x
-racadm="racadm -r $host -u $user -p $pass"
+racadm="idracadm7 -r $host -u $user -p $pass"
 $racadm config -g cfgIpmiLan -o cfgIpmiLanEnable 1
 index=$($racadm getconfig -u $target | grep cfgUserAdminIndex | awk -F = '{print $2}' | tr -d '\r')
 if [ -z "$index" ]; then

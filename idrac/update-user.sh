@@ -2,7 +2,7 @@
 # Creates user if necessary, grants admin privileges, and sets password.
 # When changing root password, some commands will fail, but it's ok.
 # Password-only changes can also be done using:
-# racadm config -g cfgUserAdmin -o cfgUserAdminPassword -i <idx> <pw>
+# idracadm7 config -g cfgUserAdmin -o cfgUserAdminPassword -i <idx> <pw>
 
 host=$1
 admin_user=$2
@@ -12,7 +12,7 @@ useridx=$4
 username=$5
 userpw=$6
 
-useradmin="racadm -r $host -u $admin_user -p $admin_pass config -g cfgUserAdmin"
+useradmin="idracadm7 -r $host -u $admin_user -p $admin_pass config -g cfgUserAdmin"
 
 echo $host =========================================================
 set -x

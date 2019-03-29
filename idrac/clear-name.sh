@@ -8,4 +8,4 @@ user=$2
 pass=$3
 
 set -x
-racadm -r $host -u $user -p $pass config -g cfgLanNetworking -o cfgDNSRacName ""
+idracadm7 -r $host -u $user -p $pass config -g cfgLanNetworking -o cfgDNSRacName ""

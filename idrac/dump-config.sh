@@ -9,4 +9,4 @@ output=${4-$host.cfg}
 
 echo "Will write configuration to file '$output'"
 set -x
-racadm -r $host -u $user -p $pass getconfig -f $output
+idracadm7 -r $host -u $user -p $pass getconfig -f $output
