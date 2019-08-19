@@ -223,7 +223,9 @@ authorityKeyIdentifier=keyid,issuer
 
 basicConstraints = CA:FALSE
 keyUsage = nonRepudiation, digitalSignature, keyEncipherment
-subjectAltName = DNS:gridftp-*.icecube.wisc.edu
+# DoIT doesn't like * in subjectAltName
+#subjectAltName = DNS:gridftp-*.icecube.wisc.edu
+subjectAltName = DNS:gridftp-users.icecube.wisc.edu,DNS:gridftp-0.icecube.wisc.edu,DNS:gridftp-1.icecube.wisc.edu,DNS:gridftp-2.icecube.wisc.edu,DNS:gridftp-3.icecube.wisc.edu,DNS:gridftp-4.icecube.wisc.edu,DNS:gridftp-5.icecube.wisc.edu,DNS:gridftp-6.icecube.wisc.edu,DNS:gridftp-7.icecube.wisc.edu,DNS:gridftp-8.icecube.wisc.edu,DNS:gridftp-9.icecube.wisc.edu,DNS:gridftp-10.icecube.wisc.edu,DNS:gridftp-11.icecube.wisc.edu,DNS:gridftp-12.icecube.wisc.edu,DNS:gridftp-13.icecube.wisc.edu,DNS:gridftp-14.icecube.wisc.edu,DNS:gridftp-15.icecube.wisc.edu,DNS:gridftp-16.icecube.wisc.edu,DNS:gridftp-17.icecube.wisc.edu,DNS:gridftp-18.icecube.wisc.edu,DNS:gridftp-19.icecube.wisc.edu,DNS:gridftp-20.icecube.wisc.edu
 
 [ v3_ca ]
 
