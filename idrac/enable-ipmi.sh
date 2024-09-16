@@ -8,15 +8,18 @@ target=${4-$user}
 # privilege 4 means administrator
 priv=${5-4}
 
-set -x
+set -ex
 racadm="idracadm7 -r $host -u $user -p $pass"
-$racadm config -g cfgIpmiLan -o cfgIpmiLanEnable 1
-index=$($racadm getconfig -u $target | grep cfgUserAdminIndex | awk -F = '{print $2}' | tr -d '\r')
+$racadm set iDRAC.IPMILan.Enable 1
+
+cfg=$(mktemp)
+$racadm get -t json -f $cfg -c iDRAC.Embedded.1
+index=$(jq ".SystemConfiguration.Components.[] | select(.FQDD==\"iDRAC.Embedded.1\") | .Attributes[] | select(.Value==\"$target\").Name" $cfg | grep -o '[0-9]*')
+rm $cfg
 if [ -z "$index" ]; then
 	echo Failed to determine index of user $target
 	exit 1
 fi
 
 # By default, IPMI LAN privilege is 0, which means no access.
-$racadm config -g cfgUserAdmin -o cfgUserAdminIpmiLanPrivilege -i $index $priv
-
+$racadm set iDRAC.Users.$index.IpmiLanPrivilege $priv

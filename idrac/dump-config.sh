@@ -5,8 +5,8 @@
 host=$1
 user=$2
 pass=$3
-output=${4-$host.cfg}
+output=${4-$host.json}
 
 echo "Will write configuration to file '$output'"
 set -x
-idracadm7 -r $host -u $user -p $pass getconfig -f $output
+idracadm7 -r $host -u $user -p $pass get -f $output -t json

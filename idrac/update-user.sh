@@ -1,8 +1,6 @@
 #!/bin/bash
 # Creates user if necessary, grants admin privileges, and sets password.
 # When changing root password, some commands will fail, but it's ok.
-# Password-only changes can also be done using:
-# idracadm7 config -g cfgUserAdmin -o cfgUserAdminPassword -i <idx> <pw>
 
 host=$1
 admin_user=$2
@@ -12,22 +10,19 @@ useridx=$4
 username=$5
 userpw=$6
 
-useradmin="idracadm7 -r $host -u $admin_user -p $admin_pass config -g cfgUserAdmin"
+racadm="idracadm7 -r $host -u $admin_user -p $admin_pass"
 
 echo $host =========================================================
 set -x
 {
-	$useradmin -i $useridx -o cfgUserAdminUserName "$username" 
-	$useradmin -i $useridx -o cfgUserAdminPassword "$userpw"
+	$racadm set iDRAC.Users.$useridx.UserName "$username"
+	$racadm set iDRAC.Users.$useridx.Password "$userpw"
+	$racadm set iDRAC.Users.$useridx.Enable 1
 	# password must already be set for this to work
-	$useradmin -i $useridx -o cfgUserAdminEnable 1
-	$useradmin -i $useridx -o cfgUserAdminPrivilege  0x000001ff
-	# setting options below is not necessary for web interface access,
-	# and may not be supported by all iDRACs
-	$useradmin -i $useridx -o cfgUserAdminIpmiLanPrivilege 4
-	$useradmin -i $useridx -o cfgUserAdminSolEnable 1
-	# looks like blades don't have this
-	#$useradmin -i $useridx -o cfgUserAdminIpmiSerialPrivilege 4
+	$racadm set iDRAC.Users.$useridx.IpmiLanPrivilege 4
+	$racadm set iDRAC.Users.$useridx.SolEnable 1
+	$racadm set iDRAC.Users.$useridx.IpmiSerialPrivilege 4
+	$racadm set iDRAC.Users.$useridx.Privilege 511
 } | grep -v 'self signed\|^Continuing'
 set +x
 echo ===============================================================
