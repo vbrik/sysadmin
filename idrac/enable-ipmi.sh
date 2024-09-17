@@ -13,7 +13,7 @@ racadm="idracadm7 -r $host -u $user -p $pass"
 $racadm set iDRAC.IPMILan.Enable 1
 
 cfg=$(mktemp)
-$racadm get -t json -f $cfg -c iDRAC.Embedded.1
+$racadm get -t json -f $cfg -c iDRAC.Embedded.1 || exit
 index=$(jq ".SystemConfiguration.Components.[] | select(.FQDD==\"iDRAC.Embedded.1\") | .Attributes[] | select(.Value==\"$target\").Name" $cfg | grep -o '[0-9]*')
 rm $cfg
 if [ -z "$index" ]; then
@@ -22,4 +22,4 @@ if [ -z "$index" ]; then
 fi
 
 # By default, IPMI LAN privilege is 0, which means no access.
-$racadm set iDRAC.Users.$index.IpmiLanPrivilege $priv
+$racadm set iDRAC.Users.$index.IpmiLanPrivilege 4
