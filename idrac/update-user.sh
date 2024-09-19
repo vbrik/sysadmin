@@ -10,20 +10,25 @@ useridx=$4
 username=$5
 userpw=$6
 
+fail() {
+    echo Error: failed with code $?
+    fail 1
+}
+
 racadm="idracadm7 -r $host -u $admin_user -p $admin_pass"
 
 echo $host =========================================================
-set -x
+set -ex
 {
-    $racadm set iDRAC.Users.$useridx.UserName "$username" || exit
-	$racadm set iDRAC.Users.$useridx.Password "$userpw" || exit
-	$racadm set iDRAC.Users.$useridx.Enable 1 || exit
+    $racadm set iDRAC.Users.$useridx.UserName "$username" || fail
+	$racadm set iDRAC.Users.$useridx.Password "$userpw" || fail
+	$racadm set iDRAC.Users.$useridx.Enable 1 || fail
 	# password must already be set for this to work
-    $racadm set iDRAC.IPMILan.Enable 1 || exit
-	$racadm set iDRAC.Users.$useridx.IpmiLanPrivilege 4 || exit
-	$racadm set iDRAC.Users.$useridx.SolEnable 1 || exit
-	$racadm set iDRAC.Users.$useridx.IpmiSerialPrivilege 4 || exit
-	$racadm set iDRAC.Users.$useridx.Privilege 511 || exit
+    $racadm set iDRAC.IPMILan.Enable 1 || fail
+	$racadm set iDRAC.Users.$useridx.IpmiLanPrivilege 4 || fail
+	$racadm set iDRAC.Users.$useridx.SolEnable 1 || fail
+	$racadm set iDRAC.Users.$useridx.IpmiSerialPrivilege 4 || fail
+	$racadm set iDRAC.Users.$useridx.Privilege 511 || fail
 } | grep -v 'self-signed\|^Continuing\|Certificate is invalid'
 set +x
 echo ===============================================================
